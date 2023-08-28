@@ -1,11 +1,14 @@
 package com.feer.xskin
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
+import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
@@ -49,18 +52,23 @@ class XSkinManager private constructor() {
         private val mSupportSkinableAttrNames by lazy(LazyThreadSafetyMode.NONE) {
             hashSetOf(
                 ATTR_NAME_BACKGROUND,
-//                ATTR_NAME_TEXT_COLOR,
-//                ATTR_NAME_TEXT_COLOR_HINT,
-//                ATTR_NAME_SRC,
-//                ATTR_NAME_TEXT,
-//                "drawableLeft",
-//                "drawableStart",
-//                "drawableRight",
-//                "drawableEnd",
-//                "drawableBottom",
+                ATTR_NAME_TEXT_COLOR,
+                ATTR_NAME_TEXT_COLOR_HINT,
+                ATTR_NAME_SRC,
+                ATTR_NAME_TEXT,
+                "drawableLeft",
+                "drawableStart",
+                "drawableRight",
+                "drawableEnd",
+                "drawableBottom",
             )
         }
 
+        /**
+         * 初始化换肤SDK
+         * @param context Context
+         * @param lastSkinPkgResPath 用户上次选择/切换的　皮肤资源包文件完整路径
+         */
         fun init(context: Context, lastSkinPkgResPath: String) {
             mManager.initSdk(context, lastSkinPkgResPath)
         }
@@ -137,6 +145,9 @@ class XSkinManager private constructor() {
         mutableListOf<WeakReference<Observer<String>>>()
     }
 
+    private val mSkinResPathMapResLoader by lazy(LazyThreadSafetyMode.NONE){
+        mutableMapOf<String,PackageResLoader>()
+    }
 
     /**
      * 初始化SDK，如果有上次记录的 皮肤包资源，则先加载一次
@@ -145,12 +156,13 @@ class XSkinManager private constructor() {
      */
     fun initSdk(context: Context, lastSkinPkgResPath: String) {
         mAppContext = context.applicationContext
+        if (mAppContext is Application){
+            val app: Application = mAppContext as Application
+            app.registerActivityLifecycleCallbacks(mAppActivityLifecycleCallback)
+        }
         mAppThemeRes = mAppContext!!.resources
         if (lastSkinPkgResPath.isNotBlank()) {
-            val resFile = File(lastSkinPkgResPath)
-            if (resFile.exists()) {
-                loadSkinRes(context, lastSkinPkgResPath)
-            }
+            loadSkinRes(context, lastSkinPkgResPath)
         }
     }
 
@@ -162,6 +174,17 @@ class XSkinManager private constructor() {
     fun loadSkinRes(context: Context, theSkinResFilePath: String) {
         Log.i(TAG,"--> loadSkinRes() theSkinResFilePath =  $theSkinResFilePath")
         if (theSkinResFilePath.isBlank()) {
+            return
+        }
+        val resFile = File(theSkinResFilePath)
+        if (!resFile.exists()){
+            return
+        }
+        //已经加载过的皮肤资源
+        val pkgResLoader = mSkinResPathMapResLoader[theSkinResFilePath]
+        if (pkgResLoader != null) {
+            mCurPkgResLoader = pkgResLoader
+            notifySkinChanged()
             return
         }
         val isLoadOk = try {
@@ -186,8 +209,8 @@ class XSkinManager private constructor() {
             )
             val skinPackageName = skinPackageInfo?.packageName
             val skinLoader = PackageResLoader(skinRes, skinPackageName ?: "")
-            // TODO:
             mCurPkgResLoader = skinLoader
+            mSkinResPathMapResLoader[theSkinResFilePath] = skinLoader
             true
         } catch (ex: Exception) {
             Log.e(TAG, "--> loadSkinRes() occur: $ex")
@@ -343,5 +366,55 @@ class XSkinManager private constructor() {
 
     }
 
+    /**
+     * App中Activiyt 的生命周期监听者
+     */
+    private val mAppActivityLifecycleCallback by lazy(LazyThreadSafetyMode.NONE){
+        object : Application.ActivityLifecycleCallbacks {
+            /**
+             * Called when the Activity calls [super.onCreate()][Activity.onCreate].
+             */
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                registerSkinSpirit(activity)
+            }
 
+            /**
+             * Called when the Activity calls [super.onStart()][Activity.onStart].
+             */
+            override fun onActivityStarted(activity: Activity) {
+            }
+
+            /**
+             * Called when the Activity calls [super.onResume()][Activity.onResume].
+             */
+            override fun onActivityResumed(activity: Activity) {
+            }
+
+            /**
+             * Called when the Activity calls [super.onPause()][Activity.onPause].
+             */
+            override fun onActivityPaused(activity: Activity) {
+            }
+
+            /**
+             * Called when the Activity calls [super.onStop()][Activity.onStop].
+             */
+            override fun onActivityStopped(activity: Activity) {
+            }
+
+            /**
+             * Called when the Activity calls
+             * [super.onSaveInstanceState()][Activity.onSaveInstanceState].
+             */
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {
+            }
+
+            /**
+             * Called when the Activity calls [super.onDestroy()][Activity.onDestroy].
+             */
+            override fun onActivityDestroyed(activity: Activity) {
+            }
+
+        }
+    }
 }

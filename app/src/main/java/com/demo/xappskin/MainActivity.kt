@@ -20,7 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
     override fun attachBaseContext(newBase: Context?) {
-        XSkinManager.registerSkinSpirit(newBase)
+//        XSkinManager.registerSkinSpirit(newBase)
         super.attachBaseContext(newBase)
     }
     override fun onCreate(savedInstanceState: Bundle?) {
