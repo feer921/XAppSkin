@@ -43,7 +43,7 @@ class App : Application() {
     }
    ```
 
-3. 框架本向支持的可换肤的　View 的属性如下：
+3. 框架本身支持的可换肤的　View 的属性如下：
 
    ```kotlin
    private const val ATTR_NAME_BACKGROUND = "background"
@@ -59,7 +59,7 @@ class App : Application() {
    "drawableBottom"
    ```
 
-   如果　App有其他的需要支持的属性，则可以使用如下该当来添加：
+   如果　App有其他的需要支持的属性，则可以使用如下方法来添加：
 
    ```kotlin
    /**
