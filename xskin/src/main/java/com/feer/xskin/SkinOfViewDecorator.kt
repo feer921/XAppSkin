@@ -2,6 +2,7 @@ package com.feer.xskin
 
 import android.util.AttributeSet
 import android.util.Log
+import android.util.TypedValue
 import android.view.View
 import androidx.lifecycle.Observer
 
@@ -36,6 +37,14 @@ open class SkinOfViewDecorator(other: IViewCreaterAndDecorator?) :
         mutableListOf<SkinableViewHandler>()
     }
 
+    /**
+     * 当前 装饰器下，View的属性名称对应的属性的值所映射的在本App资源下的资源ID
+     * eg.: "textColor" = "@color/R.color.white"
+     * "@color/R.color.white" ==> @9999999 : 99099909(resIdOfApp)
+     */
+    private val mAttrValueMapResIdInApp by lazy(LazyThreadSafetyMode.NONE){
+        mutableMapOf<String,Int>()
+    }
 
     /**
      * 可在此方法的实现中来装饰 [theView]
@@ -59,13 +68,15 @@ open class SkinOfViewDecorator(other: IViewCreaterAndDecorator?) :
             //当前的属性名称
             val attributeName = attr.getAttributeName(index)
 
-
             if (!XSkinManager.isSupportedAttrName(attributeName)) {
                 continue
             }
             //获取属性的值
             val attributeValue = attr.getAttributeValue(index)
-            Log.i("info", "--> attributeName = $attributeName, attributeValue = $attributeValue")
+
+            Log.i("info", "-------------------------------------" +
+                    "\n" +
+                    "start: --> attributeName = $attributeName, attributeValue = $attributeValue")
             if (attrInfoList == null) {
                 attrInfoList = mutableListOf()
             }
@@ -73,25 +84,27 @@ open class SkinOfViewDecorator(other: IViewCreaterAndDecorator?) :
             if (attributeValue.length < 2 || attributeValue.startsWith("#")) {
                 continue
             }
-            var attrResId = 0
-            //以？开头的表示使用属性
-            if (attributeValue.startsWith("?")) {
-                //background, attributeValue = ?16842836
-                val attrId = stringToInt(attributeValue.substring(1))
-
-                // TODO: 这种情况还需要 转化 为id
-//                theView.resources.getIdentifier()
-//                attrResId = theView.resources.getIdentifier()
-            } else {
-                //正常情况下使用 @开头
-                attrResId = stringToInt(attributeValue.substring(1))
+            var attrResId = mAttrValueMapResIdInApp[attributeValue]
+            if (attrResId == null) {
+                //以？开头的表示使用属性
+                attrResId = if (attributeValue.startsWith("?")) {
+                    //background, attributeValue = ?16842836
+                    val attrId = stringToInt(attributeValue.substring(1))
+                    val typeValue = TypedValue()
+                    theView.context.theme.resolveAttribute(attrId,typeValue,true)
+                    typeValue.resourceId
+                } else {
+                    //正常情况下使用 @开头
+                    stringToInt(attributeValue.substring(1))
+                }
+                mAttrValueMapResIdInApp[attributeValue] = attrResId
             }
-
             var valueResType = ""
             if (attrResId != 0){
                 valueResType = theView.resources.getResourceTypeName(attrResId)
             }
-            Log.i("info", "--> valueResType = $valueResType")
+            Log.i("info", "end: attrResId = $attrResId,--> valueResType = $valueResType" +
+                    "\n--------------------------------")
             attrInfoList.add(SkinableAttrInfos().apply {
                 attrName = attributeName
                 attrValueResId = attrResId
@@ -150,7 +163,7 @@ open class SkinOfViewDecorator(other: IViewCreaterAndDecorator?) :
      * @param t  The new data
      */
     override fun onChanged(t: String?) {
-        Log.i("info","--> onChanged() ")
+        Log.i("info","--> onChanged() t = $t")
         applySkin()
     }
 
