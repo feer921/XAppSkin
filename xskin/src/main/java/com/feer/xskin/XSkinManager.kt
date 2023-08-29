@@ -130,12 +130,12 @@ class XSkinManager private constructor() {
             mManager.paintSkinOfTheView(theView, skinableAttrInfos)
         }
 
-        fun getColor(@ColorRes colorResId: Int): Int = mManager.getThemeColor(colorResId)
+        fun getColor(@ColorRes colorResId: Int): Int? = mManager.getThemeColor(colorResId)
 
         fun getDrawable(@DrawableRes drawableResId: Int): Drawable? =
             mManager.getThemeDrawable(drawableResId)
 
-        fun getText(@StringRes textResId: Int): CharSequence = mManager.getThemeText(textResId)
+        fun getText(@StringRes textResId: Int): CharSequence? = mManager.getThemeText(textResId)
 
     }
 
@@ -171,54 +171,67 @@ class XSkinManager private constructor() {
      * @param theSkinResFilePath 携带皮肤资源的的文件(一般为Apk(插件Apk))完整路径
      */
     @SuppressLint("PrivateApi")
-    fun loadSkinRes(context: Context, theSkinResFilePath: String) {
-        Log.i(TAG,"--> loadSkinRes() theSkinResFilePath =  $theSkinResFilePath")
+    fun loadSkinRes(context: Context, theSkinResFilePath: String): Boolean {
+        Log.i(TAG, "--> loadSkinRes() theSkinResFilePath =  $theSkinResFilePath")
         if (theSkinResFilePath.isBlank()) {
-            return
+            return false
         }
         val resFile = File(theSkinResFilePath)
-        if (!resFile.exists()){
-            return
+        if (!resFile.exists()) {
+            mSkinResPathMapResLoader.remove(theSkinResFilePath)
+            return false
         }
         //已经加载过的皮肤资源
         val pkgResLoader = mSkinResPathMapResLoader[theSkinResFilePath]
         if (pkgResLoader != null) {
             mCurPkgResLoader = pkgResLoader
-            notifySkinChanged()
-            return
+            notifySkinChanged(theSkinResFilePath)
+            return true
         }
         val isLoadOk = try {
-            val classOfAsset = AssetManager::class.java
-            val assetManager: AssetManager = classOfAsset.newInstance()
-            val methodNamedAddPath: Method =
-                classOfAsset.getDeclaredMethod("addAssetPath", String::class.java)
-            methodNamedAddPath.isAccessible = true
-            methodNamedAddPath.invoke(assetManager, theSkinResFilePath)
+//            val classOfAsset = AssetManager::class.java
+//            val assetManager: AssetManager = classOfAsset.newInstance()
+//            val methodNamedAddPath: Method =
+//                classOfAsset.getDeclaredMethod("addAssetPath", String::class.java)
+//            methodNamedAddPath.isAccessible = true
+//            methodNamedAddPath.invoke(assetManager, theSkinResFilePath)
 
             val resOfHost: Resources = context.resources
-            if (mAppThemeRes == null){
+            if (mAppThemeRes == null) {
                 mAppThemeRes = resOfHost
             }
+
             // 构建 皮肤资源包的 资源对象 Resources
-            val skinRes = Resources(assetManager, resOfHost.displayMetrics, resOfHost.configuration)
             val packageManager = context.packageManager
+
+//            val skinRes = Resources(assetManager, resOfHost.displayMetrics, resOfHost.configuration)
+            var skinRes: Resources? = null
             //得到 皮肤资源包的 包名
             val skinPackageInfo = packageManager.getPackageArchiveInfo(
                 theSkinResFilePath,
                 PackageManager.GET_ACTIVITIES
-            )
-            val skinPackageName = skinPackageInfo?.packageName
-            val skinLoader = PackageResLoader(skinRes, skinPackageName ?: "")
-            mCurPkgResLoader = skinLoader
-            mSkinResPathMapResLoader[theSkinResFilePath] = skinLoader
-            true
+            )?.apply {
+                applicationInfo.sourceDir = theSkinResFilePath
+                applicationInfo.publicSourceDir = theSkinResFilePath
+                skinRes = packageManager.getResourcesForApplication(applicationInfo)
+            }
+            val skinPackageName = skinPackageInfo?.packageName ?: ""
+            skinRes?.let {
+                val finalSkinRes =
+                    Resources(it.assets, resOfHost.displayMetrics, resOfHost.configuration)
+                val skinLoader = PackageResLoader(finalSkinRes, skinPackageName)
+                mCurPkgResLoader = skinLoader
+                mSkinResPathMapResLoader[theSkinResFilePath] = skinLoader
+                true
+            } ?: false
         } catch (ex: Exception) {
             Log.e(TAG, "--> loadSkinRes() occur: $ex")
             false
         }
         if (isLoadOk) {
-            notifySkinChanged()
+            notifySkinChanged(theSkinResFilePath)
         }
+        return isLoadOk
     }
 
     /**
@@ -235,21 +248,36 @@ class XSkinManager private constructor() {
     /**
      * 获取当前皮肤主题下的 颜色资源
      */
-    fun getThemeColor(@ColorRes colorResId: Int): Int {
-        return mCurPkgResLoader?.getColor(colorResId) ?: mAppThemeRes?.getColor(colorResId) ?: 0
+    fun getThemeColor(@ColorRes colorResId: Int): Int? {
+        if (colorResId == 0){
+            return null
+        }
+        return mCurPkgResLoader?.getColor(colorResId) ?: mAppThemeRes?.getColor(colorResId)
     }
 
 
     @SuppressLint("UseCompatLoadingForDrawables")
     fun getThemeDrawable(@DrawableRes drawableResId: Int): Drawable? {
+        if (drawableResId == 0){
+            return null
+        }
         return mCurPkgResLoader?.getDrawable(drawableResId) ?: mAppThemeRes?.getDrawable(
             drawableResId
         )
     }
 
-    fun getThemeText(@StringRes textResId: Int): CharSequence {
+    fun getThemeText(@StringRes textResId: Int): CharSequence? {
+        if (textResId == 0){
+            return ""
+        }
         return mCurPkgResLoader?.getText(textResId) ?: mAppThemeRes?.getText(textResId) ?: ""
     }
+
+    /**
+     * 当换肤时，如果在皮肤资源包里找不到对应的资源值，是否需要置空替换
+     * def = false: 当在皮肤资源包里找不到时，不替换
+     */
+    var isReplacedAtNotFoundSkinResValue = false
 
     /**
      * 根据 可支持皮肤的属性/资源 信息，
@@ -257,49 +285,89 @@ class XSkinManager private constructor() {
      * @param skinableAttrInfos 支持的换肤属性信息
      */
     fun paintSkinOfTheView(theView: View, skinableAttrInfos: SkinableAttrInfos) {
+        Log.i(TAG, "--> paintSkinOfTheView() skinableAttrInfos = $skinableAttrInfos")
         val isPainted = mSkinViewPainer?.paintSkinOfTheView(theView, skinableAttrInfos) ?: false
         if (isPainted) {
             return
         }
         val resId = skinableAttrInfos.attrValueResId
+        if (resId == 0){//资源Id，没有获取到的情况，则不去更新皮肤资源了
+            return
+        }
         when (skinableAttrInfos.attrName) {
             ATTR_NAME_BACKGROUND -> {//要设置背景
-                if (resId != 0) {
-                    when (skinableAttrInfos.valueResTypeName) {
-                        SkinableAttrInfos.RES_TYPE_COLOR -> {
-                            theView.setBackgroundColor(getThemeColor(resId))
+                when (skinableAttrInfos.valueResTypeName) {
+                    SkinableAttrInfos.RES_TYPE_COLOR -> {
+                        var themeColor = getThemeColor(resId)
+                        if (isReplacedAtNotFoundSkinResValue) {
+                            themeColor = themeColor ?: 0
                         }
-
-                        SkinableAttrInfos.RES_TYPE_DRAWABLE -> {
-                            theView.setBackgroundDrawable(getThemeDrawable(resId))
+                        themeColor?.let {
+                            theView.setBackgroundColor(it)
                         }
+                    }
 
-                        else -> {}
+                    SkinableAttrInfos.RES_TYPE_DRAWABLE -> {
+                        val themeDrawable = getThemeDrawable(resId)
+                        if (isReplacedAtNotFoundSkinResValue) {
+                            theView.setBackgroundDrawable(themeDrawable)
+                        } else {//不替换的情况下，只有找到皮肤下的资源时才设置
+                            if (themeDrawable != null) {
+                                theView.setBackgroundDrawable(themeDrawable)
+                            }
+                        }
+                    }
+                    else -> {}
+                }
+            }
+            ATTR_NAME_SRC -> {//前景
+                if (theView is ImageView) {
+                    val themeDrawable = getThemeDrawable(resId)
+                    if (isReplacedAtNotFoundSkinResValue){
+                        theView.setImageDrawable(themeDrawable)
+                    } else {
+                        themeDrawable?.let {
+                            theView.setImageDrawable(it)
+                        }
                     }
                 }
             }
-
-            ATTR_NAME_SRC -> {//前景
-                if (theView is ImageView) {
-                    theView.setImageDrawable(getThemeDrawable(resId))
-                }
-            }
-
             ATTR_NAME_TEXT_COLOR -> {
                 if (theView is TextView) {
-                    theView.setTextColor(getThemeColor(resId))
+                    val themeColor = getThemeColor(resId)
+                    if (isReplacedAtNotFoundSkinResValue){
+                        theView.setTextColor(themeColor ?: 0)
+                    } else {
+                        themeColor?.let {
+                            theView.setTextColor(it)
+                        }
+                    }
                 }
             }
 
             ATTR_NAME_TEXT -> {
                 if (theView is TextView) {
-                    theView.text = getThemeText(resId)
+                    val themeText = getThemeText(resId)
+                    if (isReplacedAtNotFoundSkinResValue){
+                        theView.text = themeText
+                    } else {
+                        themeText?.let {
+                            theView.text = it
+                        }
+                    }
                 }
             }
 
             ATTR_NAME_TEXT_COLOR_HINT -> {
                 if (theView is TextView) {
-                    theView.setHintTextColor(getThemeColor(resId))
+                    val themeColor = getThemeColor(resId)
+                    if (isReplacedAtNotFoundSkinResValue){
+                        theView.setHintTextColor(themeColor ?: 0)
+                    } else {
+                        themeColor?.let {
+                            theView.setHintTextColor(it)
+                        }
+                    }
                 }
             }
 

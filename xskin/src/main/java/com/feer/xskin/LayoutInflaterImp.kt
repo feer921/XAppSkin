@@ -203,7 +203,7 @@ open class LayoutInflaterImp : LayoutInflater.Factory2 {
     ): View? {
         //优先使用直接 new的方式创建对应的View
         var v = createViewByViewName(parent, name, context, attrs)
-        debugLog("--> combineCreateView() parent = $parent,name = $name,from = $from,v = $v")
+//        debugLog("--> combineCreateView() parent = $parent,name = $name,from = $from,v = $v")
         if (v == null) {
 //            v = mDelegate?.createView(parent, name, context, attrs)// 这个大多数情况为 null
 //            Log.i(tag, "--> combineCreateView()  mDelegate = $mDelegate, v = $v")
@@ -260,17 +260,17 @@ open class LayoutInflaterImp : LayoutInflater.Factory2 {
         return v
     }
 
-    /**
-     * 因为系统判断 prefix 是使用 != null来判断：Class.forName(prefix != null ? (prefix + name) : name, false,
-     * 所以 默认可以 return null
-     */
-    protected open fun checkOutViewPrefixByName(viewName: String): String? {
-        return if (!viewName.contains(".")) { //没有 "xx.xx.xxView,一般表示 系统的 View
-            if ("View" == viewName) {
-                "android.view."
-            } else "android.widget."
-        } else null
-    }
+//    /**
+//     * 因为系统判断 prefix 是使用 != null来判断：Class.forName(prefix != null ? (prefix + name) : name, false,
+//     * 所以 默认可以 return null
+//     */
+//    protected open fun checkOutViewPrefixByName(viewName: String): String? {
+//        return if (!viewName.contains(".")) { //没有 "xx.xx.xxView,一般表示 系统的 View
+//            if ("View" == viewName) {
+//                "android.view."
+//            } else "android.widget."
+//        } else null
+//    }
 
     /**
      * View/控件 的创建流程完成后的流程

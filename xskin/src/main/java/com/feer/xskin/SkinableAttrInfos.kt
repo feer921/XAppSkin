@@ -35,7 +35,9 @@ class SkinableAttrInfos {
      */
     var valueResTypeName = ""
 
-
+    override fun toString(): String {
+        return "SkinableAttrInfos(attrName='$attrName', attrValueResId=$attrValueResId, valueResTypeName='$valueResTypeName')"
+    }
 
 
 }
